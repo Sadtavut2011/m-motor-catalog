@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# M Motor Voucher System
 
-## Getting Started
+ระบบโบว์ชัวร้านรถมอเตอร์ไซค์ M Motor พร้อม QR Code สำหรับให้ลูกค้าสแกนดูแคตตาล็อกและตารางราคาผ่อน
 
-First, run the development server:
+## ฟีเจอร์หลัก
 
+- **หน้าแคตตาล็อกลูกค้า**: แสดงรายการรถมอเตอร์ไซค์พร้อมรูปภาพและตารางผ่อนชำระ
+- **หลังบ้าน (Admin)**: จัดการรถมอเตอร์ไซค์ (เพิ่ม/แก้ไข/ลบ) และจัดการตารางราคาผ่อน
+- **QR Code**: สร้าง QR Code สำหรับให้ลูกค้าสแกนเข้าสู่หน้าแคตตาล็อก
+- **ฐานข้อมูล**: ใช้ SQLite สำหรับเก็บข้อมูลรถและตารางราคา
+
+## การเริ่มต้น
+
+1. ติดตั้ง dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. เริ่มเซิร์ฟเวอร์:
+```bash
+npm run dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. เปิดเบราว์เซอร์ที่ [http://localhost:3000](http://localhost:3000)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## หน้าต่างๆ ในระบบ
 
-## Learn More
+- **/** - หน้าแคตตาล็อกสำหรับลูกค้า (สแกน QR Code เพื่อเข้าหน้านี้)
+- **/admin** - หน้าหลังบ้านสำหรับจัดการข้อมูล
+- **/qr** - หน้าสร้างและดาวน์โหลด QR Code
 
-To learn more about Next.js, take a look at the following resources:
+## การใช้งานหลังบ้าน
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. เข้าไปที่ `/admin`
+2. คลิกปุ่ม **+** เพื่อเพิ่มรถมอเตอร์ไซค์ใหม่
+3. กรอกข้อมูลรถ (ชื่อ, รุ่น, ราคา, URL รูปภาพ, คำอธิบาย)
+4. เลือกรถที่ต้องการจัดการตารางผ่อนชำระ
+5. เพิ่มแผนผ่อนชำระ (จำนวนเดือน, เงินดาวน์, ผ่อนต่อเดือน, ดอกเบี้ย)
+6. สามารถแก้ไขหรือลบข้อมูลได้ตลอดเวลา
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## การใช้งาน QR Code
 
-## Deploy on Vercel
+1. เข้าไปที่ `/qr`
+2. คลิกปุ่ม "ดาวน์โหลด QR Code"
+3. พิมพ์ QR Code และวางไว้ที่ร้านเพื่อให้ลูกค้าสแกน
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## เทคโนโลยีที่ใช้
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Next.js 16 (App Router)
+- React
+- TypeScript
+- TailwindCSS
+- SQLite (better-sqlite3)
+- react-qr-code
+- Lucide React Icons
+
+## โครงสร้างโปรเจกต์
+
+```
+src/
+├── app/
+│   ├── api/              # API Routes
+│   │   ├── motorcycles/  # CRUD สำหรับรถมอเตอร์ไซค์
+│   │   ├── installment-plans/ # CRUD สำหรับตารางผ่อน
+│   │   └── pricing-tables/    # CRUD สำหรับตารางราคา
+│   ├── admin/            # หน้าหลังบ้าน
+│   ├── qr/               # หน้า QR Code
+│   └── page.tsx          # หน้าแคตตาล็อกหลัก
+└── lib/
+    └── db.ts             # การเชื่อมต่อฐานข้อมูล
+```
+
+## การนำไปใช้จริง
+
+เมื่อนำไปใช้งานจริง ควร:
+1. เปลี่ยน URL รูปภาพเป็น URL จริงของรูปรถ
+2. พิจารณาเพิ่มระบบ Authentication สำหรับหลังบ้าน
+3. พิจารณาใช้ฐานข้อมูลที่เหมาะสมกับการใช้งานจริง (เช่น PostgreSQL, MySQL)
+4. ปรับแต่ง UI ตามความต้องการของร้าน
