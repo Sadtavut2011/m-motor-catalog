@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
-import fs from 'fs';
 import crypto from 'crypto';
 import { verifyAdmin } from '@/lib/supabase/auth';
+import { createClient } from '@/lib/supabase/server';
+
+const BUCKET_NAME = 'motorcycle-images';
 
 // รายการนามสกุลไฟล์และ MIME Type ที่อนุญาตอย่างเคร่งครัด (อนุญาตเฉพาะ JPG, JPEG, PNG, WebP)
 const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
@@ -62,10 +64,30 @@ function detectImageMagicBytes(buffer: Buffer): AllowedImageType | null {
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. ตรวจสอบสิทธิ์ Admin ฝั่ง Server ก่อนประมวลผลไฟล์ใดๆ
+    // 0. ตรวจสอบ Content-Length ของ Request ล่วงหน้า เพื่อป้องกัน Request ขนาดใหญ่เกินขีดจำกัด Vercel Serverless (4.5MB)
+    const contentLength = request.headers.get('content-length');
+    const MAX_REQUEST_SIZE = 4.5 * 1024 * 1024; // 4.5 MB (ขีดจำกัดปลอดภัยบน Vercel)
+    if (contentLength && parseInt(contentLength, 10) > MAX_REQUEST_SIZE) {
+      return NextResponse.json(
+        { error: 'ขนาด Request รวมเกิน 4.5MB กรุณาเลือกรูปภาพที่มีขนาดเล็กลง' },
+        { status: 400 }
+      );
+    }
+
+    // 1. ตรวจสอบสิทธิ์ Central Admin ฝั่ง Server ก่อนประมวลผลไฟล์ใดๆ
     const auth = await verifyAdmin();
-    if (!auth.authorized) {
-      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    if (!auth.authorized || !auth.user) {
+      return NextResponse.json(
+        { error: auth.error || 'Unauthorized: สิทธิ์ผู้ดูแลระบบ (Admin) เท่านั้น' },
+        { status: auth.status }
+      );
+    }
+
+    if (auth.user.app_metadata?.role !== 'admin') {
+      return NextResponse.json(
+        { error: 'Forbidden: บัญชีนี้ไม่มีสิทธิ์ผู้ดูแลระบบ (Admin Role Required)' },
+        { status: 403 }
+      );
     }
 
     // 2. ดึงข้อมูลไฟล์จาก FormData
@@ -76,14 +98,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'ไม่พบไฟล์รูปภาพที่อัปโหลด' }, { status: 400 });
     }
 
-    // 3. ตรวจสอบขนาดไฟล์ (ไม่เกิน 10MB และต้องมีขนาดมากกว่า 0 ไบต์)
-    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+    // 3. ตรวจสอบขนาดไฟล์ (ไม่เกิน 4.5MB และต้องมีขนาดมากกว่า 0 ไบต์)
+    const MAX_FILE_SIZE = 4.5 * 1024 * 1024; // 4.5MB
     if (file.size <= 0) {
       return NextResponse.json({ error: 'ไฟล์ไม่มีข้อมูล (Empty file)' }, { status: 400 });
     }
-    if (file.size > MAX_SIZE) {
+    if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: 'ขนาดไฟล์เกิน 10MB กรุณาเลือกรูปภาพขนาดเล็กลง' },
+        { error: 'ขนาดไฟล์เกิน 4.5MB กรุณาเลือกรูปภาพขนาดเล็กลง' },
         { status: 400 }
       );
     }
@@ -141,50 +163,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 8. เตรียมโฟลเดอร์จัดเก็บใน public/uploads
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    // 9. สร้างชื่อไฟล์ใหม่ที่ปลอดภัย ป้องกัน Path Traversal และอักขระพิเศษ
+    // 8. สร้างชื่อไฟล์ใหม่ที่ปลอดภัย ป้องกันชื่อไฟล์ซ้ำ และป้องกัน Path Traversal
     const rawBase = path.basename(file.name || '', rawExt);
     const safeSlug = rawBase.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24);
     const baseName = safeSlug.length > 0 ? safeSlug : 'image';
-    const randomHex = crypto.randomBytes(4).toString('hex');
+    const randomHex = crypto.randomBytes(6).toString('hex');
     const canonicalExt = magicType === 'jpeg' ? (rawExt === '.jpeg' ? '.jpeg' : '.jpg') : `.${magicType}`;
     const uniqueFileName = `${Date.now()}-${baseName}-${randomHex}${canonicalExt}`;
 
-    // ป้องกัน Path Traversal
-    const targetFilePath = path.resolve(uploadDir, uniqueFileName);
-    const resolvedUploadDir = path.resolve(uploadDir);
-    if (!targetFilePath.startsWith(resolvedUploadDir + path.sep)) {
+    // 9. อัปโหลดขึ้น Supabase Storage (Bucket: motorcycle-images) ด้วย Admin Session จริง (ห้ามใช้ Service Role Key)
+    const supabase = await createClient();
+    const canonicalContentType =
+      magicType === 'jpeg'
+        ? 'image/jpeg'
+        : magicType === 'png'
+        ? 'image/png'
+        : 'image/webp';
+
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(uniqueFileName, buffer, {
+        contentType: canonicalContentType,
+        upsert: false, // ป้องกันการเขียนทับไฟล์เดิมทุกกรณี
+      });
+
+    if (uploadError) {
+      console.error('Supabase Storage upload error:', uploadError);
       return NextResponse.json(
-        { error: 'ตรวจพบชื่อไฟล์ที่ไม่ปลอดภัย (Invalid file path)' },
-        { status: 400 }
+        { error: `เกิดข้อผิดพลาดในการบันทึกรูปภาพขึ้นคลาวด์: ${uploadError.message}` },
+        { status: 500 }
       );
     }
 
-    // ป้องกันการเขียนทับไฟล์เดิม (Overwrite protection)
-    if (fs.existsSync(targetFilePath)) {
-      return NextResponse.json(
-        { error: 'เกิดข้อผิดพลาดชื่อไฟล์ซ้ำ กรุณาลองใหม่อีกครั้ง' },
-        { status: 409 }
-      );
-    }
+    // 10. ดึง Public URL จาก Supabase Storage
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(BUCKET_NAME).getPublicUrl(uniqueFileName);
 
-    // 10. บันทึกไฟล์ลง Disk
-    fs.writeFileSync(targetFilePath, buffer, { flag: 'wx' });
-
-    const publicUrl = `/uploads/${uniqueFileName}`;
-
+    // คืนค่า Response รูปแบบเดิม 100% ที่หน้า Admin UI คาดหวัง
     return NextResponse.json({
       success: true,
       url: publicUrl,
       filename: uniqueFileName,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Upload API error:', error);
-    return NextResponse.json({ error: 'เกิดข้อผิดพลาดในการบันทึกรูปภาพ' }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || 'เกิดข้อผิดพลาดในการบันทึกรูปภาพ' },
+      { status: 500 }
+    );
   }
 }
