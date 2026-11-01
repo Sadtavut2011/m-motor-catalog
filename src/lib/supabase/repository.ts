@@ -107,18 +107,26 @@ export async function getMotorcycleColors(
 }
 
 /**
- * ดึงตัวเลือกเงินดาวน์ทั้งหมด (แทนที่ GET /api/down-payment-options เดิม)
+ * ดึงตัวเลือกเงินดาวน์ของรถตาม motorcycle_id (แทนที่ GET /api/down-payment-options เดิม)
  */
-export async function getDownPaymentOptions(): Promise<{
+export async function getDownPaymentOptions(
+  motorcycleId?: number
+): Promise<{
   data: DownPaymentOptionRow[] | null;
   error: any;
 }> {
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from('down_payment_options')
       .select('*')
       .order('amount', { ascending: true });
+
+    if (motorcycleId !== undefined && motorcycleId !== null) {
+      query = query.eq('motorcycle_id', motorcycleId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('getDownPaymentOptions error:', error);
@@ -138,18 +146,26 @@ export async function getDownPaymentOptions(): Promise<{
 }
 
 /**
- * ดึงตัวเลือกระยะเวลางวดผ่อนทั้งหมด (แทนที่ GET /api/installment-periods เดิม)
+ * ดึงตัวเลือกระยะเวลางวดผ่อนของรถตาม motorcycle_id (แทนที่ GET /api/installment-periods เดิม)
  */
-export async function getInstallmentPeriods(): Promise<{
+export async function getInstallmentPeriods(
+  motorcycleId?: number
+): Promise<{
   data: InstallmentPeriodRow[] | null;
   error: any;
 }> {
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from('installment_periods')
       .select('*')
       .order('months', { ascending: true });
+
+    if (motorcycleId !== undefined && motorcycleId !== null) {
+      query = query.eq('motorcycle_id', motorcycleId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('getInstallmentPeriods error:', error);
@@ -248,8 +264,8 @@ export async function getCalculationData(motorcycleId: number): Promise<{
 
     const [motorcycleRes, downPaymentRes, periodsRes] = await Promise.all([
       supabase.from('motorcycles').select('*').eq('id', motorcycleId).maybeSingle(),
-      supabase.from('down_payment_options').select('*').order('amount', { ascending: true }),
-      supabase.from('installment_periods').select('*').order('months', { ascending: true }),
+      supabase.from('down_payment_options').select('*').eq('motorcycle_id', motorcycleId).order('amount', { ascending: true }),
+      supabase.from('installment_periods').select('*').eq('motorcycle_id', motorcycleId).order('months', { ascending: true }),
     ]);
 
     if (motorcycleRes.error) {

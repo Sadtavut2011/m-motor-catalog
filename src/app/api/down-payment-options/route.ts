@@ -1,13 +1,29 @@
 import { NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/supabase/auth';
-import { createDownPaymentOptionSchema, formatZodError } from '@/lib/validations';
+import { createDownPaymentOptionSchema, formatZodError, idParamSchema } from '@/lib/validations';
 import { getDownPaymentOptions } from '@/lib/supabase/repository';
 import { createClient } from '@/lib/supabase/server';
 
-// GET all down payment options
-export async function GET() {
+// GET down payment options for a specific motorcycle
+export async function GET(request: Request) {
   try {
-    const { data, error } = await getDownPaymentOptions();
+    const { searchParams } = new URL(request.url);
+    const rawMotorcycleId = searchParams.get('motorcycle_id');
+
+    if (!rawMotorcycleId) {
+      return NextResponse.json(
+        { error: 'กรุณาระบุ motorcycle_id ใน Query Parameter (ห้ามใช้ค่าส่วนกลาง)' },
+        { status: 400 }
+      );
+    }
+
+    const idValidation = idParamSchema.safeParse(rawMotorcycleId);
+    if (!idValidation.success) {
+      return NextResponse.json(formatZodError(idValidation.error, 'motorcycle_id'), { status: 400 });
+    }
+
+    const motorcycleId = idValidation.data;
+    const { data, error } = await getDownPaymentOptions(motorcycleId);
     if (error) {
       console.error('Error fetching down payment options:', error);
       return NextResponse.json({ error: 'Failed to fetch down payment options' }, { status: 500 });
@@ -19,7 +35,7 @@ export async function GET() {
   }
 }
 
-// POST new down payment option
+// POST new down payment option for a specific motorcycle
 export async function POST(request: Request) {
   try {
     const auth = await verifyAdmin();
@@ -37,12 +53,12 @@ export async function POST(request: Request) {
       return NextResponse.json(formatZodError(validation.error), { status: 400 });
     }
 
-    const { amount } = validation.data;
+    const { motorcycle_id, amount } = validation.data;
 
     const supabase = await createClient();
     const { data: newOption, error } = await supabase
       .from('down_payment_options')
-      .insert({ amount })
+      .insert({ motorcycle_id, amount })
       .select('*')
       .single();
 

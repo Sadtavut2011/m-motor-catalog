@@ -37,12 +37,14 @@ export interface MotorcycleWithColors extends MotorcycleRow {
 
 export interface DownPaymentOptionRow {
   id: number;
+  motorcycle_id?: number;
   amount: number;
   created_at?: string;
 }
 
 export interface InstallmentPeriodRow {
   id: number;
+  motorcycle_id?: number;
   months: number;
   created_at?: string;
 }

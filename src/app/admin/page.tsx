@@ -346,11 +346,7 @@ export default function AdminPage() {
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      await Promise.all([
-        fetchMotorcycles(),
-        fetchDownPaymentOptions(),
-        fetchInstallmentPeriods(),
-      ]);
+      await fetchMotorcycles();
     } finally {
       setLoading(false);
     }
@@ -379,11 +375,18 @@ export default function AdminPage() {
             }
           }
           fetchInstallmentPlans(initial.id);
+          fetchDownPaymentOptions(initial.id);
+          fetchInstallmentPeriods(initial.id);
           return initial;
         }
         // Update selected motorcycle data if already selected
         if (prev) {
           const match = data.find((m) => m.id === prev.id);
+          if (match) {
+            fetchInstallmentPlans(match.id);
+            fetchDownPaymentOptions(match.id);
+            fetchInstallmentPeriods(match.id);
+          }
           return match || prev;
         }
         return prev;
@@ -412,29 +415,51 @@ export default function AdminPage() {
     }
   };
 
-  const fetchDownPaymentOptions = async () => {
+  const fetchDownPaymentOptions = async (motorcycleId?: number) => {
+    const targetId = motorcycleId ?? selectedMotorcycle?.id;
+    if (!targetId) {
+      setDownPaymentOptions([]);
+      return;
+    }
     try {
-      const response = await fetch('/api/down-payment-options');
-      const data = await response.json();
-      setDownPaymentOptions(data);
+      const response = await fetch(`/api/down-payment-options?motorcycle_id=${targetId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setDownPaymentOptions(Array.isArray(data) ? data : []);
+      } else {
+        setDownPaymentOptions([]);
+      }
     } catch (error) {
       console.error('Failed to fetch down payment options:', error);
+      setDownPaymentOptions([]);
     }
   };
 
-  const fetchInstallmentPeriods = async () => {
+  const fetchInstallmentPeriods = async (motorcycleId?: number) => {
+    const targetId = motorcycleId ?? selectedMotorcycle?.id;
+    if (!targetId) {
+      setInstallmentPeriods([]);
+      return;
+    }
     try {
-      const response = await fetch('/api/installment-periods');
-      const data = await response.json();
-      setInstallmentPeriods(data);
+      const response = await fetch(`/api/installment-periods?motorcycle_id=${targetId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setInstallmentPeriods(Array.isArray(data) ? data : []);
+      } else {
+        setInstallmentPeriods([]);
+      }
     } catch (error) {
       console.error('Failed to fetch installment periods:', error);
+      setInstallmentPeriods([]);
     }
   };
 
   const handleMotorcycleSelect = (motorcycle: Motorcycle) => {
     setSelectedMotorcycle(motorcycle);
     fetchInstallmentPlans(motorcycle.id);
+    fetchDownPaymentOptions(motorcycle.id);
+    fetchInstallmentPeriods(motorcycle.id);
     setIsEditing(false);
     setIsAdding(false);
     setEditForm({});
@@ -461,6 +486,10 @@ export default function AdminPage() {
   };
 
   const handleAddDownPaymentSubmit = async (amount: number) => {
+    if (!selectedMotorcycle) {
+      alert('กรุณาเลือกรุ่นรถก่อนเพิ่มตัวเลือกเงินดาวน์');
+      return;
+    }
     if (isNaN(amount) || amount < 0) {
       alert('กรุณากรอกจำนวนเงินที่ถูกต้อง (0 ขึ้นไป)');
       return;
@@ -469,17 +498,16 @@ export default function AdminPage() {
       const response = await fetch('/api/down-payment-options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount }),
+        body: JSON.stringify({ motorcycle_id: selectedMotorcycle.id, amount }),
       });
       if (response.ok) {
-        await fetchDownPaymentOptions();
-        if (selectedMotorcycle) {
-          fetchInstallmentPlans(selectedMotorcycle.id);
-        }
+        await fetchDownPaymentOptions(selectedMotorcycle.id);
+        fetchInstallmentPlans(selectedMotorcycle.id);
         setShowDownPaymentModal(false);
         setDownPaymentInput('');
       } else {
-        alert('เพิ่มตัวเลือกเงินดาวน์ไม่สำเร็จ');
+        const err = await response.json().catch(() => ({}));
+        alert(err.error || 'เพิ่มตัวเลือกเงินดาวน์ไม่สำเร็จ');
       }
     } catch (error) {
       console.error('Failed to add down payment option:', error);
@@ -488,18 +516,17 @@ export default function AdminPage() {
   };
 
   const handleDeleteDownPayment = async (id: number, amount: number) => {
+    if (!selectedMotorcycle) return;
     const label = amount === 0 ? 'ฟรีดาวน์' : `฿${amount.toLocaleString()}`;
-    if (!confirm(`ต้องการลบตัวเลือกเงินดาวน์ "${label}"?`)) return;
+    if (!confirm(`ต้องการลบตัวเลือกเงินดาวน์ "${label}" ของ ${selectedMotorcycle.name}?`)) return;
 
     try {
       const response = await fetch(`/api/down-payment-options/${id}`, {
         method: 'DELETE',
       });
       if (response.ok) {
-        await fetchDownPaymentOptions();
-        if (selectedMotorcycle) {
-          fetchInstallmentPlans(selectedMotorcycle.id);
-        }
+        await fetchDownPaymentOptions(selectedMotorcycle.id);
+        fetchInstallmentPlans(selectedMotorcycle.id);
       }
     } catch (error) {
       console.error('Failed to delete down payment option:', error);
@@ -507,6 +534,10 @@ export default function AdminPage() {
   };
 
   const handleAddPeriodSubmit = async (months: number) => {
+    if (!selectedMotorcycle) {
+      alert('กรุณาเลือกรุ่นรถก่อนเพิ่มจำนวนงวด');
+      return;
+    }
     if (isNaN(months) || months <= 0) {
       alert('กรุณากรอกจำนวนเดือนที่ถูกต้อง');
       return;
@@ -515,17 +546,16 @@ export default function AdminPage() {
       const response = await fetch('/api/installment-periods', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ months }),
+        body: JSON.stringify({ motorcycle_id: selectedMotorcycle.id, months }),
       });
       if (response.ok) {
-        await fetchInstallmentPeriods();
-        if (selectedMotorcycle) {
-          fetchInstallmentPlans(selectedMotorcycle.id);
-        }
+        await fetchInstallmentPeriods(selectedMotorcycle.id);
+        fetchInstallmentPlans(selectedMotorcycle.id);
         setShowPeriodModal(false);
         setPeriodInput('');
       } else {
-        alert('เพิ่มจำนวนงวดไม่สำเร็จ');
+        const err = await response.json().catch(() => ({}));
+        alert(err.error || 'เพิ่มจำนวนงวดไม่สำเร็จ');
       }
     } catch (error) {
       console.error('Failed to add installment period:', error);
@@ -534,17 +564,16 @@ export default function AdminPage() {
   };
 
   const handleDeleteInstallmentPeriod = async (id: number, months: number) => {
-    if (!confirm(`ต้องการลบจำนวนงวด "${months} เดือน"?`)) return;
+    if (!selectedMotorcycle) return;
+    if (!confirm(`ต้องการลบจำนวนงวด "${months} เดือน" ของ ${selectedMotorcycle.name}?`)) return;
 
     try {
       const response = await fetch(`/api/installment-periods/${id}`, {
         method: 'DELETE',
       });
       if (response.ok) {
-        await fetchInstallmentPeriods();
-        if (selectedMotorcycle) {
-          fetchInstallmentPlans(selectedMotorcycle.id);
-        }
+        await fetchInstallmentPeriods(selectedMotorcycle.id);
+        fetchInstallmentPlans(selectedMotorcycle.id);
       }
     } catch (error) {
       console.error('Failed to delete installment period:', error);
@@ -567,12 +596,40 @@ export default function AdminPage() {
 
       if (response.ok) {
         const created: Motorcycle = await response.json();
+        
+        // Auto-seed default down payment & periods based on cc_size (Requirement 7)
+        const defaultPeriods = (created.cc_size && created.cc_size >= 300)
+          ? [12, 18, 24, 36, 48, 60]
+          : [12, 18, 24, 30, 36, 42];
+
+        try {
+          // Seed 0 (ฟรีดาวน์)
+          await fetch('/api/down-payment-options', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ motorcycle_id: created.id, amount: 0 }),
+          });
+
+          // Seed default periods
+          for (const m of defaultPeriods) {
+            await fetch('/api/installment-periods', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ motorcycle_id: created.id, months: m }),
+            });
+          }
+        } catch (seedErr) {
+          console.warn('Auto-seed default options warning:', seedErr);
+        }
+
         await fetchMotorcycles();
         setIsAdding(false);
         setEditForm({});
         setSelectedMotorcycle(created);
         fetchInstallmentPlans(created.id);
-        alert('เพิ่มรถมอเตอร์ไซค์สำเร็จ! คุณสามารถเพิ่มสีและรูปภาพตัวอย่างของแต่ละสีได้ที่ด้านล่าง');
+        fetchDownPaymentOptions(created.id);
+        fetchInstallmentPeriods(created.id);
+        alert('เพิ่มรถมอเตอร์ไซค์สำเร็จ! ระบบได้ตั้งค่าเงินดาวน์ (ฟรีดาวน์) และงวดผ่อนเริ่มต้นตามขนาด cc ให้เรียบร้อยแล้ว');
       } else {
         const err = await response.json();
         alert(err.error || 'บันทึกข้อมูลรถไม่สำเร็จ');
@@ -1335,11 +1392,14 @@ export default function AdminPage() {
                       <CreditCard className="h-6 w-6" />
                     </div>
                     <div>
-                      <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
-                        ตั้งค่าตารางผ่อนชำระ
+                      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
+                        ตั้งค่าตารางผ่อนชำระ ({selectedMotorcycle.name})
+                        <span className="px-2.5 py-0.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-semibold">
+                          {selectedMotorcycle.cc_size ? `${selectedMotorcycle.cc_size}cc` : 'ไม่ระบุ cc'}
+                        </span>
                       </h2>
                       <p className="text-xs sm:text-sm text-gray-500">
-                        กำหนดตัวเลือกเงินดาวน์และจำนวนงวดที่ต้องการให้แสดงในตารางคำนวณ
+                        กำหนดตัวเลือกเงินดาวน์และจำนวนงวดเฉพาะรุ่น {selectedMotorcycle.name} ({selectedMotorcycle.model}) แยกอิสระโดยไม่กระทบรถรุ่นอื่น
                       </p>
                     </div>
                   </div>
@@ -1587,10 +1647,17 @@ export default function AdminPage() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-scaleUp">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-red-600" />
-                เพิ่มตัวเลือกเงินดาวน์
-              </h3>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <DollarSign className="h-5 w-5 text-red-600" />
+                  เพิ่มตัวเลือกเงินดาวน์
+                </h3>
+                {selectedMotorcycle && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    สำหรับ {selectedMotorcycle.name} ({selectedMotorcycle.model})
+                  </p>
+                )}
+              </div>
               <button
                 onClick={() => setShowDownPaymentModal(false)}
                 className="p-1 text-gray-400 hover:text-gray-600 rounded-lg"
@@ -1655,10 +1722,17 @@ export default function AdminPage() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-scaleUp">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-red-600" />
-                เพิ่มระยะเวลาผ่อน (งวด)
-              </h3>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-red-600" />
+                  เพิ่มระยะเวลาผ่อน (งวด)
+                </h3>
+                {selectedMotorcycle && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    สำหรับ {selectedMotorcycle.name} ({selectedMotorcycle.model})
+                  </p>
+                )}
+              </div>
               <button
                 onClick={() => setShowPeriodModal(false)}
                 className="p-1 text-gray-400 hover:text-gray-600 rounded-lg"
@@ -1670,7 +1744,7 @@ export default function AdminPage() {
             {/* Presets */}
             <p className="text-xs text-gray-500 font-medium mb-2">จำนวนงวดด่วน:</p>
             <div className="flex flex-wrap gap-1.5 mb-4">
-              {[12, 18, 24, 30, 36, 42, 48].map((m) => (
+              {[12, 18, 24, 30, 36, 42, 48, 60].map((m) => (
                 <button
                   key={m}
                   type="button"

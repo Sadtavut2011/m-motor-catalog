@@ -45,6 +45,7 @@ export const updateInstallmentPlanSchema = z.object({
  * Schema สำหรับเพิ่มตัวเลือกจำนวนงวด (POST /api/installment-periods)
  */
 export const createInstallmentPeriodSchema = z.object({
+  motorcycle_id: positiveIntegerSchema('รหัสรถจักรยานยนต์ (motorcycle_id)'),
   months: positiveIntegerSchema('จำนวนงวด (months)').refine(
     (val) => val <= 120,
     'จำนวนงวดต้องไม่เกิน 120 เดือน'
@@ -55,5 +56,6 @@ export const createInstallmentPeriodSchema = z.object({
  * Schema สำหรับเพิ่มตัวเลือกเงินดาวน์ (POST /api/down-payment-options)
  */
 export const createDownPaymentOptionSchema = z.object({
+  motorcycle_id: positiveIntegerSchema('รหัสรถจักรยานยนต์ (motorcycle_id)'),
   amount: requiredNonNegativeNumberSchema('จำนวนเงินดาวน์ (amount)'),
 });
