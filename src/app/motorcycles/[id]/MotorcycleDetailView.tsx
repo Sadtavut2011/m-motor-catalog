@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, CreditCard, ChevronRight, Share2, Check, QrCode } from 'lucide-react';
+import { ArrowLeft, CreditCard, ChevronRight, Share2, Check, QrCode, Printer } from 'lucide-react';
 import AdminPreviewHeader from '@/components/AdminPreviewHeader';
 
 interface MotorcycleColor {
@@ -164,6 +164,15 @@ export default function MotorcycleDetailView({ id }: { id: string }) {
               </Link>
               <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <AdminPreviewHeader motorcycleId={id} />
+                <Link
+                  href={`/motorcycles/${id}/print`}
+                  target="_blank"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs sm:text-sm font-medium transition-colors"
+                  title="พิมพ์เอกสาร / แคตตาล็อก PDF ของรุ่นนี้"
+                >
+                  <Printer className="h-4 w-4" />
+                  <span className="hidden sm:inline">พิมพ์ PDF</span>
+                </Link>
                 <button
                   onClick={handleShare}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs sm:text-sm font-medium transition-colors"
@@ -377,6 +386,15 @@ export default function MotorcycleDetailView({ id }: { id: string }) {
                   >
                     ติดต่อสอบถาม / จองรถ
                   </a>
+                  <Link
+                    href={`/motorcycles/${id}/print`}
+                    target="_blank"
+                    className="px-4 py-2.5 bg-white hover:bg-gray-50 text-gray-800 border border-gray-200 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                    title="พิมพ์หรือบันทึก PDF ของรุ่นนี้"
+                  >
+                    <Printer className="h-4 w-4 text-red-600" />
+                    <span>พิมพ์ PDF</span>
+                  </Link>
                   <a
                     href="https://www.facebook.com/profile.php?id=61590568614695"
                     target="_blank"
